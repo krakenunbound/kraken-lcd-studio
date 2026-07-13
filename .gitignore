@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*.log
+*.pid
+*.stop
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Local preferences and user media
+lcd_gui_config.json
+*.mp4
+*.webm
+*.mkv
+*.mov
+*.avi
+*.gif
+*.jpg
+*.jpeg
+*.png
+*.webp
+
+# Original abandoned monitor-overlay experiment
+LCD_Overlay.zip
+LCD_Overlay_README.md
+lcd_overlay2.pyw
+overview.txt
+overlay.log
+player_config.json
+requirements.txt
