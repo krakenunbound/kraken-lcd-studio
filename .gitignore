@@ -21,6 +21,10 @@ lcd_gui_config.json
 *.png
 *.webp
 
+# Public documentation images are intentionally tracked.
+!docs/images/
+!docs/images/*.png
+
 # Original abandoned monitor-overlay experiment
 LCD_Overlay.zip
 LCD_Overlay_README.md
@@ -28,4 +32,3 @@ lcd_overlay2.pyw
 overview.txt
 overlay.log
 player_config.json
-requirements.txt

@@ -4,17 +4,36 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kraken-lcd"
-version = "0.1.0"
-description = "Native Windows controller and visual media cropper for the Thermaltake 3.9-inch 480x128 LCD"
+version = "0.3.0"
+description = "Native Windows controller, media cropper, and system-metrics overlay for the Thermaltake 3.9-inch 480x128 LCD"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Kraken LCD contributors" }]
+keywords = ["thermaltake", "lcd", "hardware-monitor", "system-monitor", "windows"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Win32 (MS Windows)",
+  "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+  "Operating System :: Microsoft :: Windows :: Windows 10",
+  "Operating System :: Microsoft :: Windows :: Windows 11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: System :: Hardware",
+  "Topic :: System :: Monitoring",
+]
 dependencies = [
   "Pillow>=11.0",
   "pywinusb>=0.4.2",
   "tkinterdnd2>=0.4.3",
+  "pystray>=0.19.5",
+  "psutil>=5.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/krakenunbound/kraken-lcd-studio"
+Documentation = "https://github.com/krakenunbound/kraken-lcd-studio/blob/main/INSTALL.md"
+Issues = "https://github.com/krakenunbound/kraken-lcd-studio/issues"
+Releases = "https://github.com/krakenunbound/kraken-lcd-studio/releases"
 
 [project.scripts]
 kraken-lcd = "thermaltake_lcd:main"
@@ -24,4 +43,4 @@ kraken-lcd-studio = "lcd_gui:main"
 
 
 [tool.setuptools]
-py-modules = ["thermaltake_lcd", "lcd_media", "lcd_gui"]
+py-modules = ["thermaltake_lcd", "lcd_media", "lcd_metrics", "lcd_gui"]

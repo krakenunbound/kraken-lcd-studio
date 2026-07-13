@@ -6,9 +6,9 @@ the exact `264A:233D` device.
 ## Development setup
 
 ```powershell
-py -3.12 -m pip install -r requirements-direct.txt
+py -3.12 -m pip install -r requirements.txt
 py -3.12 -m unittest discover -s tests -v
-py -3.12 -m py_compile thermaltake_lcd.py lcd_media.py lcd_gui.py
+py -3.12 -m py_compile thermaltake_lcd.py lcd_media.py lcd_metrics.py lcd_gui.py
 ```
 
 ffmpeg and ffprobe must be on `PATH` for media integration tests.

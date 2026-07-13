@@ -12,6 +12,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install -r requirements-direct.txt
-      - run: python -m py_compile thermaltake_lcd.py lcd_media.py lcd_gui.py
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pip install . --no-deps
+      - run: python -m py_compile thermaltake_lcd.py lcd_media.py lcd_metrics.py lcd_gui.py
       - run: python -m unittest discover -s tests -v

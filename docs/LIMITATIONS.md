@@ -32,6 +32,15 @@ Thermaltake's official 20 MB upload limit does not apply. Files remain on the PC
 and are decoded frame by frame. Disk size affects storage and seeking, not the
 panel's framebuffer limit.
 
+## Hardware sensor availability
+
+Windows does not provide a consistent standard API for CPU package temperature.
+Kraken LCD Studio therefore shows `--` when LibreHardwareMonitor is not running
+with its JSON web server enabled. NVIDIA GPU metrics use `nvidia-smi`; AMD and
+Intel GPU temperature/clock support depends on LibreHardwareMonitor exposing the
+corresponding sensors. Sensor names and availability vary by motherboard,
+firmware, driver, and hardware generation.
+
 ## Compatibility
 
 Tested device:

@@ -283,13 +283,29 @@ def stream_media(
     loop: bool,
     stop_event: threading.Event,
     status: Callable[[str], None] | None = None,
+    frame_transform: Callable[[bytes], bytes] | None = None,
 ) -> int:
     if not info.animated:
         jpeg = render_lcd_jpeg(info.path, crop, rotation, jpeg_quality=jpeg_quality)
-        lcd.send_jpeg(jpeg, log_frame=False)
-        if status:
-            status("Static image sent; the panel will retain it.")
-        return 1
+        if not frame_transform:
+            lcd.send_jpeg(jpeg, log_frame=False)
+            if status:
+                status("Static image sent; the panel will retain it.")
+            return 1
+        count = 0
+        interval = 1 / min(2.0, max(1.0, fps))
+        lcd.start_heartbeat()
+        try:
+            while not stop_event.is_set():
+                lcd.send_jpeg(frame_transform(jpeg), log_frame=False)
+                count += 1
+                if status and count % 10 == 0:
+                    status(f"Live overlay active • {count} updates")
+                if stop_event.wait(interval):
+                    break
+        finally:
+            lcd.stop_heartbeat()
+        return count
 
     command = ["ffmpeg", "-hide_banner", "-loglevel", "error"]
     if loop:
@@ -328,7 +344,7 @@ def stream_media(
             now = time.monotonic()
             if next_frame_at > now and stop_event.wait(next_frame_at - now):
                 break
-            lcd.send_jpeg(jpeg, log_frame=False)
+            lcd.send_jpeg(frame_transform(jpeg) if frame_transform else jpeg, log_frame=False)
             count += 1
             next_frame_at += interval
             if status and count % max(1, round(fps)) == 0:

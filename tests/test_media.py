@@ -1,6 +1,9 @@
 import unittest
+import threading
+from pathlib import Path
+from unittest.mock import patch
 
-from lcd_media import Crop, exact_filter, maximum_crop, quality_to_qscale
+from lcd_media import Crop, MediaInfo, exact_filter, maximum_crop, quality_to_qscale, stream_media
 
 
 class CropTests(unittest.TestCase):
@@ -29,6 +32,45 @@ class CropTests(unittest.TestCase):
 
     def test_quality_mapping(self):
         self.assertLess(quality_to_qscale(95), quality_to_qscale(35))
+
+    def test_static_media_refreshes_while_live_overlay_is_enabled(self):
+        stop = threading.Event()
+
+        class FakeLcd:
+            def __init__(self):
+                self.frames = []
+                self.heartbeat_started = False
+                self.heartbeat_stopped = False
+
+            def start_heartbeat(self):
+                self.heartbeat_started = True
+
+            def stop_heartbeat(self):
+                self.heartbeat_stopped = True
+
+            def send_jpeg(self, frame, log_frame=False):
+                self.frames.append(frame)
+                stop.set()
+
+        lcd = FakeLcd()
+        info = MediaInfo(Path("still.jpg"), 480, 128, 0, 0, "mjpeg", 1, 100, False)
+        with patch("lcd_media.render_lcd_jpeg", return_value=b"base"):
+            count = stream_media(
+                lcd,
+                info,
+                Crop(0, 0, 1, 1),
+                0,
+                8,
+                85,
+                1,
+                True,
+                stop,
+                frame_transform=lambda frame: frame + b"-overlay",
+            )
+        self.assertEqual(count, 1)
+        self.assertEqual(lcd.frames, [b"base-overlay"])
+        self.assertTrue(lcd.heartbeat_started)
+        self.assertTrue(lcd.heartbeat_stopped)
 
 
 if __name__ == "__main__":
