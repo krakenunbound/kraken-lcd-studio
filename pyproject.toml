@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kraken-lcd"
+version = "0.1.0"
+description = "Native Windows controller and visual media cropper for the Thermaltake 3.9-inch 480x128 LCD"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Kraken LCD contributors" }]
+dependencies = [
+  "Pillow>=11.0",
+  "pywinusb>=0.4.2",
+  "tkinterdnd2>=0.4.3",
+]
+
+[project.scripts]
+kraken-lcd = "thermaltake_lcd:main"
+
+[project.gui-scripts]
+kraken-lcd-studio = "lcd_gui:main"
+
+
+[tool.setuptools]
+py-modules = ["thermaltake_lcd", "lcd_media", "lcd_gui"]
