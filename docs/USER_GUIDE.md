@@ -91,6 +91,9 @@ refreshes the card at a low rate. Use **Stop / Cancel** or the tray menu's
 
 - **LCD not found:** reconnect the panel and verify Device Manager exposes
   `3.9 inch Bar Type TFT LCD Display Module-B` with `264A:233D`.
+- **LCD in use by another program:** close TT RGB Plus or any other RGB, fan,
+  or monitoring tool that controls USB devices. Playback resumes on its own
+  once the panel is free.
 - **Handshake timeout:** close TT RGB Plus, then unplug/reconnect the panel.
 - **No drag-and-drop:** run the installer again. Browse always remains available.
 - **Export fails:** confirm `ffmpeg` and `ffprobe` work from PowerShell.

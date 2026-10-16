@@ -9,7 +9,7 @@ cropper for the Thermaltake 3.9-inch 480×128 LCD panel (`VID 264A`, `PID 233D`,
 part `AC-073-OO1NAN-A1`). It controls the panel directly through Microsoft's HID
 driver—no TT RGB Plus, replacement USB driver, or packet sniffer is required.
 
-Version: **0.3.0**
+Version: **0.3.1**
 
 ![Kraken LCD Studio performance overlay](docs/images/kraken-lcd-studio-overlay.png)
 

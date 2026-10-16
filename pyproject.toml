@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kraken-lcd"
-version = "0.3.0"
+version = "0.3.1"
 description = "Native Windows controller, media cropper, and system-metrics overlay for the Thermaltake 3.9-inch 480x128 LCD"
 readme = "README.md"
 requires-python = ">=3.12"

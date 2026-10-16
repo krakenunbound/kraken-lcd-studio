@@ -5,6 +5,26 @@ this project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-16
+
+### Fixed
+
+- A panel held open by another program was reported as "LCD NOT FOUND" even
+  though Windows showed it as healthy. Discovery now lists the panel's HID
+  interfaces without opening them and reports **LCD IN USE BY ANOTHER
+  PROGRAM** separately from a disconnected panel.
+- HID handles are released when the startup handshake fails instead of being
+  leaked on every retry.
+
+### Added
+
+- Playback of the remembered setup resumes automatically when the panel
+  becomes available again, without restarting the Studio.
+- Status changes and full error details are written to
+  `kraken_lcd_studio.log` beside the app, so failures during a hidden
+  background launch leave a record. Repeated identical tray notifications are
+  suppressed.
+
 ## [0.3.0] - 2026-07-13
 
 ### Added

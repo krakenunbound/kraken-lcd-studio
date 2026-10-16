@@ -74,8 +74,13 @@ shared Python packages is optional and is not required to uninstall the app.
 
 ## Troubleshooting
 
-- **LCD not found:** close TT RGB Plus, reconnect USB, and check Device Manager
-  for the `264A:233D` device.
+- **LCD not found:** reconnect USB and check Device Manager for the
+  `264A:233D` device.
+- **LCD in use by another program:** the panel is connected, but TT RGB Plus or
+  another RGB, fan, or monitoring tool has it open. Close that program; playback
+  resumes automatically once the panel is released.
+- **Anything else:** check `kraken_lcd_studio.log` in the app folder for the
+  exact error and its time.
 - **Media or export fails:** confirm both `ffmpeg` and `ffprobe` work in a new
   PowerShell window.
 - **No CPU temperature:** run LibreHardwareMonitor and enable its web server.
