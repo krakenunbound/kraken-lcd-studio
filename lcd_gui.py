@@ -13,6 +13,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -35,7 +36,16 @@ from lcd_media import (
     stream_media,
 )
 from lcd_metrics import DEFAULT_LHM_URL, MetricsMonitor, OverlayStyle, PerformanceOverlayRenderer
-from thermaltake_lcd import LcdError, ThermaltakeLcd, make_test_frame
+from thermaltake_lcd import (
+    BUSY_MESSAGE,
+    STATE_BUSY,
+    STATE_MISSING,
+    STATE_READY,
+    LcdBusyError,
+    LcdError,
+    ThermaltakeLcd,
+    make_test_frame,
+)
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -58,6 +68,8 @@ except ImportError:
 
 APP_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = APP_DIR / "lcd_gui_config.json"
+LOG_PATH = APP_DIR / "kraken_lcd_studio.log"
+LOG_LIMIT_BYTES = 1_000_000
 STARTUP_NAME = "Kraken LCD Studio"
 INSTANCE_PORT = 47839
 VERSION = (APP_DIR / "VERSION").read_text(encoding="utf-8").strip() if (APP_DIR / "VERSION").exists() else "dev"
@@ -120,6 +132,17 @@ def is_startup_enabled() -> bool:
         return True
     except FileNotFoundError:
         return False
+
+
+def append_log_file(text: str) -> None:
+    """Keep a durable log; a hidden pythonw launch has no console to report failures."""
+    try:
+        if LOG_PATH.exists() and LOG_PATH.stat().st_size > LOG_LIMIT_BYTES:
+            LOG_PATH.replace(LOG_PATH.with_name("kraken_lcd_studio.old.log"))
+        with LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(text if text.endswith("\n") else f"{text}\n")
+    except OSError:
+        pass
 
 
 def acquire_single_instance(show_existing: bool = True) -> socket.socket | None:
@@ -468,6 +491,8 @@ class KrakenLcdApp(RootBase):
         self.ui_events: queue.Queue[tuple] = queue.Queue()
         self.preview_generation = 0
         self.closing = False
+        self.device_state: str | None = None
+        self.last_error_notice: str | None = None
 
         self.path_var = tk.StringVar(value="")
         self.device_var = tk.StringVar(value="Checking USB panel…")
@@ -500,6 +525,7 @@ class KrakenLcdApp(RootBase):
 
         self.configure_styles()
         self.build_ui()
+        self.log(f"Kraken LCD Studio {VERSION} started{' in the background' if background else ''}.")
         self.start_instance_listener()
         self.start_tray()
         self.after(50, self.process_ui_events)
@@ -1134,8 +1160,10 @@ class KrakenLcdApp(RootBase):
             self.startup_var.set(is_startup_enabled())
             self.show_error("Could not update Windows startup", str(exc))
 
-    def log(self, message: str) -> None:
+    def log(self, message: str, persist: bool = True) -> None:
         stamp = time.strftime("%H:%M:%S")
+        if persist:
+            append_log_file(f"[{time.strftime('%Y-%m-%d')} {stamp}] {message}")
         self.log_text.configure(state="normal")
         self.log_text.insert("end", f"[{stamp}] {message}\n")
         self.log_text.see("end")
@@ -1344,6 +1372,7 @@ class KrakenLcdApp(RootBase):
                     self.active_overlay_renderer = renderer
                     frame_transform = lambda jpeg: renderer.render_jpeg(jpeg, quality)
                 with ThermaltakeLcd() as lcd:
+                    self.last_error_notice = None
                     overlay_status = " with rotating performance cards" if frame_transform else ""
                     self.post(self.log, f"Connected. Streaming at {fps:.0f} FPS{overlay_status}…")
                     frames = stream_media(
@@ -1356,7 +1385,7 @@ class KrakenLcdApp(RootBase):
                         speed,
                         loop,
                         self.stop_event,
-                        lambda text: self.post(self.log, text),
+                        lambda text: self.post(self.log, text, False),
                         frame_transform=frame_transform,
                     )
                 self.post(self.finish_work, f"Stopped cleanly after {frames} frame{'s' if frames != 1 else ''}.")
@@ -1538,14 +1567,30 @@ class KrakenLcdApp(RootBase):
         self.worker = None
         self.operation_kind = None
         self.overlay_restart_pending = False
+        append_log_file("".join(traceback.format_exception(exc)))
         self.log(f"Error: {exc}")
         if self.state() == "withdrawn":
-            if self.tray_icon:
+            if self.tray_icon and str(exc) != self.last_error_notice:
                 self.tray_icon.notify(str(exc), "Kraken LCD playback error")
-            if failed_kind == "playback" and self.resume_on_startup and not self.closing:
-                self.after(15000, self.start_playback_when_idle)
+            self.last_error_notice = str(exc)
+            # A busy or missing panel is resumed by poll_device once it is ready again.
+            device_ready = self.device_state == STATE_READY and not isinstance(exc, LcdBusyError)
+            if failed_kind == "playback" and device_ready and self.resume_on_startup and not self.closing:
+                self.after(15000, self.resume_playback)
         else:
             messagebox.showerror("Kraken LCD", str(exc))
+
+    def resume_playback(self) -> None:
+        """Restart the remembered LCD stream once the panel can be reached again."""
+        if self.closing or not self.resume_on_startup or not self.media_info:
+            return
+        if self.worker and self.worker.is_alive():
+            return
+        self.start_playback()
+
+    def report_callback_exception(self, exc_type, exc, tb) -> None:
+        append_log_file("".join(traceback.format_exception(exc_type, exc, tb)))
+        self.log(f"Unexpected error: {exc}")
 
     def show_error(self, title: str, message: str) -> None:
         self.log(f"{title}: {message}")
@@ -1557,24 +1602,37 @@ class KrakenLcdApp(RootBase):
     def poll_device(self) -> None:
         def worker():
             try:
-                devices = ThermaltakeLcd.discover()
-                connected = len(devices) == 2
-                serial = devices[0].serial_number if connected else ""
-                self.post(self.device_result, connected, serial)
+                state, serial = ThermaltakeLcd.status()
             except Exception:
-                self.post(self.device_result, False, "")
+                state, serial = STATE_MISSING, ""
+            self.post(self.device_result, state, serial)
 
         threading.Thread(target=worker, name="device-poll", daemon=True).start()
         if not self.closing:
             self.after(4000, self.poll_device)
 
-    def device_result(self, connected: bool, serial: str) -> None:
-        if connected:
+    def device_result(self, state: str, serial: str) -> None:
+        previous = self.device_state
+        self.device_state = state
+        if state == STATE_READY:
             self.device_var.set(f"● LCD CONNECTED  {serial}")
             self.device_label.configure(bg="#18251f", fg=ACCENT)
+        elif state == STATE_BUSY:
+            self.device_var.set("● LCD IN USE BY ANOTHER PROGRAM")
+            self.device_label.configure(bg="#2b261c", fg=WARN)
         else:
             self.device_var.set("● LCD NOT FOUND")
             self.device_label.configure(bg="#2b1c1f", fg=ERROR)
+
+        if state == previous:
+            return
+        if state == STATE_BUSY:
+            self.log(BUSY_MESSAGE)
+        elif state == STATE_MISSING:
+            self.log("The LCD is not connected to USB.")
+        elif previous is not None:
+            self.log("The LCD is available again.")
+            self.resume_playback()
 
     def request_close(self) -> None:
         self.save_config()

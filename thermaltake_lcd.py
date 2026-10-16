@@ -15,6 +15,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
 import argparse
+import ctypes
 import io
 import math
 import queue
@@ -26,19 +27,34 @@ from pathlib import Path
 from typing import Iterable
 
 import pywinusb.hid as hid
+from pywinusb.hid import winapi
 from PIL import Image, ImageDraw, ImageFont
 
 
 VENDOR_ID = 0x264A
 PRODUCT_ID = 0x233D
+DEVICE_ID = f"vid_{VENDOR_ID:04x}&pid_{PRODUCT_ID:04x}"
 WIDTH = 480
 HEIGHT = 128
 COMMAND_SIZE = 440
 FRAME_PACKET_SIZE = 1024
 FRAME_DATA_SIZE = 1020
 
+STATE_READY = "ready"
+STATE_BUSY = "busy"
+STATE_MISSING = "missing"
+BUSY_MESSAGE = (
+    "The LCD is plugged in, but another program has it open exclusively. Close "
+    "TT RGB Plus or any other RGB, fan, or monitoring tool that controls USB "
+    "devices; the panel is picked up again as soon as it is released."
+)
+
 
 class LcdError(RuntimeError):
+    pass
+
+
+class LcdBusyError(LcdError):
     pass
 
 
@@ -103,8 +119,38 @@ class ThermaltakeLcd:
         self._command_lock = threading.Lock()
 
     @staticmethod
-    def discover() -> list[hid.HidDevice]:
-        return hid.HidDeviceFilter(vendor_id=VENDOR_ID, product_id=PRODUCT_ID).get_devices()
+    def interface_paths() -> list[str]:
+        """List the panel's HID interface paths without opening the device.
+
+        pywinusb's HidDeviceFilter opens every HID device for read/write while
+        enumerating and silently drops any it cannot open, so a panel held by
+        another program would be indistinguishable from an unplugged one.
+        """
+        guid = winapi.GetHidGuid()
+        info_data = winapi.SP_DEVINFO_DATA()
+        info_data.cb_size = ctypes.sizeof(info_data)
+        paths = []
+        with winapi.DeviceInterfaceSetInfo(guid) as h_info:
+            for interface_data in winapi.enum_device_interfaces(h_info, guid):
+                path = winapi.get_device_path(h_info, interface_data, ctypes.byref(info_data))
+                if DEVICE_ID in path.lower():
+                    paths.append(path)
+        return sorted(paths)
+
+    @classmethod
+    def discover(cls) -> list[hid.HidDevice]:
+        """Return the panel's interfaces; ones that could not be opened have vendor_id 0."""
+        return [hid.HidDevice(path) for path in cls.interface_paths()]
+
+    @classmethod
+    def status(cls) -> tuple[str, str]:
+        """Return (STATE_READY | STATE_BUSY | STATE_MISSING, serial number)."""
+        devices = cls.discover()
+        if len(devices) < 2:
+            return STATE_MISSING, ""
+        if not all(device.vendor_id for device in devices):
+            return STATE_BUSY, ""
+        return STATE_READY, devices[0].serial_number
 
     def connect(self) -> None:
         devices = self.discover()
@@ -117,13 +163,21 @@ class ThermaltakeLcd:
                 by_interface[1] = device
         if set(by_interface) != {0, 1}:
             found = [device.device_path for device in devices]
-            raise LcdError(f"Expected HID interfaces MI_00 and MI_01; found: {found or 'none'}")
+            raise LcdError(
+                f"Thermaltake LCD {VENDOR_ID:04X}:{PRODUCT_ID:04X} not found "
+                f"(expected HID interfaces MI_00 and MI_01; found: {found or 'none'})"
+            )
+        if not all(device.vendor_id for device in by_interface.values()):
+            raise LcdBusyError(BUSY_MESSAGE)
 
         self.command = HidChannel(by_interface[0], COMMAND_SIZE)
         self.frame = HidChannel(by_interface[1], FRAME_PACKET_SIZE)
         try:
             self.command.open()
             self.frame.open()
+        except hid.HIDError as exc:
+            self.close()
+            raise LcdBusyError(BUSY_MESSAGE) from exc
         except Exception:
             self.close()
             raise
@@ -224,7 +278,12 @@ class ThermaltakeLcd:
 
     def __enter__(self) -> "ThermaltakeLcd":
         self.connect()
-        self.initialize()
+        try:
+            self.initialize()
+        except BaseException:
+            # __exit__ does not run when __enter__ raises; release the HID handles.
+            self.close()
+            raise
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -351,10 +410,16 @@ def print_info() -> int:
         print(f"Thermaltake LCD {VENDOR_ID:04X}:{PRODUCT_ID:04X} not found")
         return 1
     print(f"Found {len(devices)} HID interfaces:")
-    for device in sorted(devices, key=lambda item: item.device_path):
-        print(f"  {device.product_name}")
+    for device in devices:
+        if device.vendor_id:
+            print(f"  {device.product_name}")
+        else:
+            print("  (in use by another program)")
         print(f"    {device.device_path}")
-        print(f"    serial: {device.serial_number}")
+        print(f"    serial: {device.serial_number or '-'}")
+    if not all(device.vendor_id for device in devices):
+        print(BUSY_MESSAGE)
+        return 1
     return 0
 
 
